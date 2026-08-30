@@ -16,9 +16,6 @@ get_metadata <- function(title=NULL, author=NULL, doi=NULL) {
   }, error = function(e) return(NULL))
 }
 
-# 1. Define your helper function to take one DOI
-# Function to map over a dataframe of DOIs/UIDs
-# 1. Define your helper function to take one DOI
 get_metadata_by_doi <- function(doi, uid) {
   
   # Add your mailto and wrap in tryCatch for robustness
@@ -53,8 +50,7 @@ get_metadata_by_doi <- function(doi, uid) {
   return(expanded_data)
 }
 
-# Function to map over a dataframe of DOIs/UIDs
-get_metadata_for_df <- function(df) {
+get_metadata_for_df_using_crossref <- function(df) {
   # Map over each row, passing both DOI and UID as list elements
   # Using purrr::pmap_df to handle the multi-argument input
   results <- purrr::pmap_df(list(doi = df$DOI, uid = df$UID), function(doi, uid) {
@@ -137,7 +133,7 @@ collaboration_abpa_kpi <- function(productType="Publications", inYear=2025,
   t.indices <- get_random_sample(nrow(useData), size=20)
 
   #Retrieve metadata from crossref for publications
-  all_metadata <- get_metadata_for_df(useData[t.indices, ])
+  all_metadata <- get_metadata_for_df_using_crossref(useData[t.indices, ])
 
 # for any record in all_metadata for which there is an orcid, but no affiliation
 # check orcid for the affiliation.
