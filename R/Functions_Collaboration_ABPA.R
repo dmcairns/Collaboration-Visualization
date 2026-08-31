@@ -167,7 +167,7 @@ collaboration_abpa_kpi <- function(productType="Publications", inYear=2025,
   useData <- theData |>
     dplyr::filter(!is.na(DOI))
   # Randomly select some (n) publications for testing
-  t.indices <- get_random_sample(nrow(useData), size=20)
+  t.indices <- get_random_sample(nrow(useData), size=200)
 
   #Retrieve metadata from crossref for publications
   all_metadata <- get_metadata_for_df_using_crossref(useData[t.indices, ])
@@ -334,8 +334,44 @@ collaboration_abpa_kpi <- function(productType="Publications", inYear=2025,
 }
 
 
+determine_tamu_collaborations <- function(inData, level="Department"){
+   # Filter out all non-tamu authors
+  outData <- inData %>%
+    dplyr::filter(TAMU==TRUE) %>%
+    dplyr::filter(!is.na(Department)) %>%
+    add_count(uid, name = "uid_count") %>%
+    dplyr::filter(uid_count > 1) %>%
+    group_by(uid) %>%
+    mutate(
+      collab = {
+        # Extract valid codes for the publication
+        codes <- TAMU_Code[!is.na(TAMU_Code) & TAMU_Code != "UNKN"]
+        
+        if (length(codes) > 0) {
+          uniq_codes <- sort(unique(codes))
+          
+          # If all authors are from the same single department, repeat it twice
+          if (length(uniq_codes) == 1) {
+            paste(rep(uniq_codes, 2), collapse = ":")
+          } else {
+            # If multiple distinct departments are involved, list each unique code once
+            paste(uniq_codes, collapse = ":")
+          }
+        } else {
+          NA_character_
+        }
+      }
+    ) %>%
+    ungroup() %>%
+    select(all_of(c("uid", "collab"))) %>%
+    distinct() %>%
+    dplyr::filter(!is.na(collab))
+
+  outData
+}
 someData <- collaboration_abpa_kpi()
 
+tamuData <- determine_tamu_collaborations(someData)
 #someData1 <- check_orcid_for_affiliation(someData)
 
 
