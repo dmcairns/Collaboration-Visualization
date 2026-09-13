@@ -1,0 +1,812 @@
+---
+title: "Collaboration KPI Overview"
+format: html
+editor: visual
+---
+```{r initialize, echo=FALSE, message=FALSE, warning=FALSE}
+library(fontawesome)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(ggraph)
+library(stringr)
+library(tidygraph)
+library(httr2)
+library(purrr)
+library(digest)
+library(stringdist)
+library(cli)
+
+source("./Functions_Collaboration_ABPA.R")
+
+theIteration <- 8
+numPubsToProcess <- 3000
+keepYears <- c(2025)
+keepStatus <- c("Completed/Published")
+orcidEval <- FALSE
+
+#tempPubs <- readRDS(paste0("../R//someDataMonday", theIteration, ".rds"))
+tempPubs <- readRDS("../R/temp1.rds")          
+#assignt(paste0("someDataMonday", theIteration, ".rds"), tempPubs)
+allPubs <- read.csv("../Data/testPubs2024-2025.csv")
+deptList <- readRDS("../Data/deptList.rds")
+usePubs_verified_doi <- readRDS("../usePubs_verified_doi.rds")
+additionalDOI <- readRDS("../Data/additionalDOI.rds")
+testPubsAll <- readRDS("../Data/testPubsAll.rds")
+testPubsAll <- testPubsAll |>
+  filter(Year...22 %in% keepYears)
+
+
+```
+
+## Collaboration KPI Overview
+
+This document provides an overview of the development of collaboration graphics and provides a status update for the project.
+
+Objectives:
+
+-  Provide information about number of publications within a year range.
+
+-  Identify the number of papers that are collaborative (among any institutions).
+
+-  For all publications, determine the
+
+author list
+
+author institution
+
+author department
+
+-  Filter down to only TAMU authors
+
+-  Determine collaboration type at level of College
+
+-  Determine collaboration type at level of Department
+
+-  Circle packing figures
+
+-  Extend to grants awarded and grants applied
+
+Current Status:
+
+
+Process
+
+`r fontawesome::fa("check", fill = "green")` Retrieve 2025 Publication Data from Interfolio F180.
+```{r pubNumbers1, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+library(dplyr)
+library(glue)
+library(htmltools)
+library(purrr)
+
+# 1. Calculate status counts while filtering out NA values
+status_counts <- testPubsAll %>%
+  filter(!is.na(Status)) %>%
+  count(Status)
+
+# 2. Generate individual HTML cards dynamically
+cards_html <- map2_chr(status_counts$Status, status_counts$n, function(status_name, count) {
+  glue('
+  <div style="
+    flex: 1;
+    min-width: 180px;
+    background-color: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-left: 6px solid #500000;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  ">
+    <div style="
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #495057;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    ">
+      {status_name}
+    </div>
+    <div style="
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #500000;
+      line-height: 1;
+    ">
+      {format(count, big.mark = ",")}
+    </div>
+  </div>
+  ')
+})
+
+# 3. Wrap all generated cards in a flex container
+wrapper_html <- glue('
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 15px 0; font-family: sans-serif;">
+  {paste(cards_html, collapse = "\n")}
+</div>
+')
+
+# 4. Print HTML output for Quarto / R Markdown
+cat("\n\n")
+cat(as.character(HTML(wrapper_html)))
+
+```
+
+
+`r fontawesome::fa("check", fill = "green")` Filter to only consider the completed/published papers.
+```{r pubNumbers3, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+testPubsFiltered <- testPubsAll %>%
+  filter(Status %in% keepStatus)
+
+status_counts <- testPubsFiltered %>%
+  filter(!is.na(Status)) %>%
+  count(Status)
+
+# 2. Generate individual HTML cards dynamically
+cards_html <- map2_chr(status_counts$Status, status_counts$n, function(status_name, count) {
+  glue('
+  <div style="
+    flex: 1;
+    min-width: 180px;
+    background-color: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-left: 6px solid #500000;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  ">
+    <div style="
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #495057;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    ">
+      {status_name}
+    </div>
+    <div style="
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #500000;
+      line-height: 1;
+    ">
+      {format(count, big.mark = ",")}
+    </div>
+  </div>
+  ')
+})
+
+# 3. Wrap all generated cards in a flex container
+wrapper_html <- glue('
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 15px 0; font-family: sans-serif;">
+  {paste(cards_html, collapse = "\n")}
+</div>
+')
+
+# 4. Print HTML output for Quarto / R Markdown
+cat("\n\n")
+cat(as.character(HTML(wrapper_html)))
+
+```
+
+How many pubs have no DOI information?
+
+```{r pubNumbers4, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+testPubsFilteredNoDOI <- testPubsFiltered |>
+  filter(is.na(DOI)) |>
+  distinct()
+
+
+status_counts <- testPubsFilteredNoDOI %>%
+  filter(!is.na(Status)) %>%
+  count(Status)
+
+# 2. Generate individual HTML cards dynamically
+cards_html <- map2_chr(status_counts$Status, status_counts$n, function(status_name, count) {
+  glue('
+  <div style="
+    flex: 1;
+    min-width: 180px;
+    background-color: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-left: 6px solid #500000;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  ">
+    <div style="
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #495057;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    ">
+      {status_name}
+    </div>
+    <div style="
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #500000;
+      line-height: 1;
+    ">
+      {format(count, big.mark = ",")}
+    </div>
+  </div>
+  ')
+})
+
+# 3. Wrap all generated cards in a flex container
+wrapper_html <- glue('
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 15px 0; font-family: sans-serif;">
+  {paste(cards_html, collapse = "\n")}
+</div>
+')
+
+# 4. Print HTML output for Quarto / R Markdown
+cat("\n\n")
+cat(as.character(HTML(wrapper_html)))
+
+```
+
+`r fontawesome::fa("check", fill = "green")` Retrieve DOI using author, title and journal title from CrossRef & OpenAlex.
+```{r retrieveDOI, echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
+
+additionalDOI <- batch_get_dois(testPubsFilteredNoDOI, max_dist = 0.40)
+
+```
+
+```{r pubNumbers6, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+# 1. Calculate status counts while filtering out NA values
+status_counts <- additionalDOI %>%
+  count(doi_source)
+
+# 2. Generate individual HTML cards dynamically
+cards_html <- map2_chr(status_counts$doi_source, status_counts$n, function(status_name, count) {
+  glue('
+  <div style="
+    flex: 1;
+    min-width: 180px;
+    background-color: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-left: 6px solid #500000;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  ">
+    <div style="
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #495057;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    ">
+      {status_name}
+    </div>
+    <div style="
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #500000;
+      line-height: 1;
+    ">
+      {format(count, big.mark = ",")}
+    </div>
+  </div>
+  ')
+})
+
+# 3. Wrap all generated cards in a flex container
+wrapper_html <- glue('
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 15px 0; font-family: sans-serif;">
+  {paste(cards_html, collapse = "\n")}
+</div>
+')
+
+# 4. Print HTML output for Quarto / R Markdown
+cat("\n\n")
+cat(as.character(HTML(wrapper_html)))
+```
+
+`r fontawesome::fa("check", fill = "green")` Join found DOI data back into original data frame.
+
+```{r joinFound, echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE}
+skinnyDOI <- additionalDOI |>
+  select(all_of(c("UID", "Last Name", "found_doi", "doi_source")))
+
+testPubsFiltered2 <- testPubsFiltered |>
+  left_join(skinnyDOI, by=c("UID", "Last Name")) |>
+  mutate(DOI=case_when(!is.na(found_doi) ~ found_doi,
+                       TRUE ~ DOI))
+
+```
+
+Total Number of Pubs with DOI
+```{r pubNumbers7, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+testPubsFilteredNoDOI <- testPubsFiltered2 |>
+  filter(!is.na(DOI)) |>
+  distinct()
+
+
+status_counts <- testPubsFilteredNoDOI %>%
+  filter(!is.na(Status)) %>%
+  count(Status)
+
+# 2. Generate individual HTML cards dynamically
+cards_html <- map2_chr(status_counts$Status, status_counts$n, function(status_name, count) {
+  glue('
+  <div style="
+    flex: 1;
+    min-width: 180px;
+    background-color: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-left: 6px solid #500000;
+    border-radius: 8px;
+    padding: 20px 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  ">
+    <div style="
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #495057;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    ">
+      {status_name}
+    </div>
+    <div style="
+      font-size: 2.5rem;
+      font-weight: 800;
+      color: #500000;
+      line-height: 1;
+    ">
+      {format(count, big.mark = ",")}
+    </div>
+  </div>
+  ')
+})
+
+# 3. Wrap all generated cards in a flex container
+wrapper_html <- glue('
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 15px 0; font-family: sans-serif;">
+  {paste(cards_html, collapse = "\n")}
+</div>
+')
+
+# 4. Print HTML output for Quarto / R Markdown
+cat("\n\n")
+cat(as.character(HTML(wrapper_html)))
+
+```
+
+`r fontawesome::fa("check", fill = "green")` Verify DOIs with CrossRef.
+
+```{r verifyDOI, echo=FALSE, message=FALSE, warning=FALSE, eval=FALSE}
+testPubsFiltered2 <- testPubsFiltered2 |>
+  mutate(doi=DOI,
+         uid=UID,
+         title=Title,
+         author=`Last Name`)
+usePubs_verified_doi <- verify_doi_batch(testPubsFiltered2)
+```
+
+```{r card6, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+# 1. Calculate status counts while filtering out NA values
+status_counts <- usePubs_verified_doi %>%
+  count(status)
+
+wrapper_html <- make_status_card_html(status_counts, displayCountsForField="status")
+#print(status_counts)
+# 4. Print HTML output for Quarto / R Markdown
+knitr::asis_output(wrapper_html)
+```
+
+
+`r fontawesome::fa("check", fill = "green")` Parse author field and separate into a single row for each author using openalex.
+
+```{r openalexR, echo=FALSE, eval=FALSE, message=FALSE, warning=FALSE}
+
+temp1 <- expand_authors_by_openalex(usePubs_verified_doi)
+saveRDS(temp1, "temp1.rds")
+```
+
+
+```{r crossref, echo=FALSE, eval=FALSE, message=FALSE, warning=FALSE}
+# currently not used.  openalex produces cleaner, better results.
+temp1 <- collaboration_abpa_kpi(numPubs=numPubsToProcess,
+                                previouslyDoneBatch=tempPubs,
+                                )
+saveRDS(temp1, "temp1.rds")
+```
+
+
+
+For authors with missing affiliation, use check orcid id to determine affiliation.
+
+```{r orcid, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+data_after_orcid <- temp1
+if(orcidEval){
+data_after_orcid <- check_orcid_for_affiliation(temp1, doEval=orcidEval)
+}
+saveRDS(data_after_orcid, "data_after_orcid.rds")
+```
+
+Parse affiliation to find TAMU authors
+```{r tamuAuthors, echo=FALSE, eval=FALSE, message=FALSE, warning=FALSE}
+data_after_orcid <- data_after_orcid %>%
+  mutate(affiliation=author_affiliation)
+data_after_tamu <- addField_TAMU(data_after_orcid)
+saveRDS(data_after_tamu, "data_after_tamu.rds")
+#data_after_tamu <- addField_TAMU(data_after_orcid)
+```
+
+Parse affiliation to determine Department and College
+```{r deptAffiliation, echo=FALSE, eval=FALSE, message=FALSE, warning=FALSE}
+
+data_after_dept <- cbind(data_after_tamu, match_phrase_fuzzy(data_after_tamu, deptList=deptList))
+saveRDS(data_after_dept, "data_after_dept.RDS")
+```
+
+
+
+Filter out non-tamu authors
+```{r tamuAuthors1, echo=FALSE, eval=FALSE, message=FALSE, warning=FALSE}
+data_tamu_authors <- data_after_dept |>
+  filter(!is.na(TAMU)) |>
+  filter(TAMU==TRUE)
+
+```
+
+Identify collaborations among tamu authors
+```{r tamuCollaborations, echo=FALSE, eval=FALSE, message=FALSE, warning=FALSE}
+data_tamu_authors <- data_tamu_authors %>%
+  mutate(uid=UID)
+data_tamu_collabs <- determine_tamu_collaborations(data_tamu_authors)
+saveRDS(data_tamu_collabs, "data_tamu_collabs.rds")
+
+```
+
+Using uid as the key, join results back to original dataset
+
+```{r pubNumbers, echo=FALSE, message=FALSE, warning=FALSE}
+#| output: asis
+
+library(glue)
+library(htmltools)
+data_tamu_collabs <- readRDS("data_tamu_collabs.rds")
+
+pubStats <- filterPubsFromF180(allPubs, data_tamu_collabs)
+
+card_html <- glue('
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin: 15px 0; font-family: sans-serif;">
+<!-- Total Publications Card -->
+<div style="
+flex: 1;
+min-width: 180px;
+background-color: #f8f9fa;
+border: 2px solid #e9ecef;
+border-left: 6px solid #500000;
+border-radius: 8px;
+padding: 20px 24px;
+box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+">
+<div style="
+font-size: 0.9rem;
+font-weight: 600;
+color: #495057;
+margin-bottom: 8px;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+">
+Total Publications
+</div>
+<div style="
+font-size: 2.5rem;
+font-weight: 800;
+color: #500000;
+line-height: 1;
+">
+{format(pubStats$totalNumPubs, big.mark = ",")}
+</div>
+</div>
+
+<!-- Processed Publications Card -->
+<div style="
+flex: 1;
+min-width: 180px;
+background-color: #f8f9fa;
+border: 2px solid #e9ecef;
+border-left: 6px solid #0056b3;
+border-radius: 8px;
+padding: 20px 24px;
+box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+">
+<div style="
+font-size: 0.9rem;
+font-weight: 600;
+color: #495057;
+margin-bottom: 8px;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+">
+Processed
+</div>
+<div style="
+font-size: 2.5rem;
+font-weight: 800;
+color: #0056b3;
+line-height: 1;
+">
+{format(pubStats$processedPubs, big.mark = ",")}
+</div>
+</div>
+
+<!-- Single Author Publications Card -->
+<div style="
+flex: 1;
+min-width: 180px;
+background-color: #f8f9fa;
+border: 2px solid #e9ecef;
+border-left: 6px solid #2B5235;
+border-radius: 8px;
+padding: 20px 24px;
+box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+">
+<div style="
+font-size: 0.9rem;
+font-weight: 600;
+color: #495057;
+margin-bottom: 8px;
+text-transform: uppercase;
+letter-spacing: 0.5px;
+">
+Single Author
+</div>
+<div style="
+font-size: 2.5rem;
+font-weight: 800;
+color: #2B5235;
+line-height: 1;
+">
+{format(pubStats$singleAuthorPubs, big.mark = ",")}
+</div>
+</div>
+</div>
+')
+
+# Print with explicit leading whitespace and raw HTML class specification
+cat("\n\n")
+cat(as.character(HTML(card_html)))
+
+```
+
+Create circle packing figure for all publications to distinguish single author from multiple author papers (one circle for each).
+
+```{r circlePacking, echo=FALSE, eval=TRUE, message=FALSE, warning=FALSE}
+
+# edges are parent-child relationships (hierarchy) in the format of a data frame with
+# from and to collumns.  No numbers, only the hierarchy,
+# e.g. from TAMU to AG
+# e.g. from AG to AG:AT
+
+# nodes are values for the leaves (individual circles that are sized proportionally)
+# a data frame with collumns "name" and "value".  Terminal leaf values of NA or 0 are
+# not allowed.
+
+make_edges_college <- function(inData){
+  # make the edges dataframe consisting of to from and to columns
+  # from collumns should be TAMU and each Department
+  # to collumns should be Departments and collaboration types e.g. (GEOG:ATMO)
+  #
+  unique_colleges <- unique(unlist(stringr::str_split(inData$college_collab, ":")))
+  unique_colleges <- unique_colleges[!is.na(unique_colleges)]
+  unique_departments <- unique(unlist(stringr::str_split(inData$collab, ":")))
+  unique_dept_collabs <- unique(inData$collab)
+  
+  edges <- data.frame(
+    from = c(
+      rep("TAMU", length(unique_colleges)),
+      rep(unique_colleges, length(unique(inData$college_collab)))
+    ),
+    to = c(
+      unique_colleges,
+      rep(unique(inData$college_collab), length(unique_colleges))
+    )
+  )
+  edges
+}  #Not currently used
+make_nodes_college <- function(inData){
+  unique_colleges <- unique(unlist(stringr::str_split(inData$college_collab, ":")))
+  unique_colleges <- unique_colleges[!is.na(unique_colleges)]
+  unique_departments <- unique(unlist(stringr::str_split(inData$collab, ":")))
+  unique_dept_collabs <- unique(inData$collab)
+  nodes <- data.frame(
+    name=c("TAMU", unique_colleges),
+    value=c(0,
+            rep(0, length(unique_colleges))
+    
+    )
+  )
+  # create a table with number of times a college has a collab pub.
+  # count the numer of individual ATs for instance in the inData$
+  nodes
+}  #Not currently used
+
+link_colleges_departments <- function(inData) {
+  outData <- inData |>
+    select("COLLEGE_CODE", "Department") |>
+    filter(!is.na(COLLEGE_CODE)) |>
+    arrange(COLLEGE_CODE, Department) |>
+    distinct()
+  
+  names(outData) <- c("from", "to")
+  outData
+}  #Not currently used
+
+# 1. Edges Data Frame
+#############################################
+# Edges is the hierarchical structure.      #
+# Contains a from and a to column           #
+# Every hierarhica; combination must be     #
+# present.                                  #
+# TAMU to each college.                     #
+# Each College to consituent departments.   #
+#############################################
+
+create_edges_df <- function(data, root_name = "TAMU", min_size = 1) {
+  # 1. Get filtered collaboration pairs meeting the minimum frequency threshold
+  pairs <- data %>%
+    filter(!is.na(college_collab) & college_collab != "") %>%
+    count(college_collab, name = "size") %>%
+    filter(size >= min_size)
+  
+  # Handle empty result if threshold is too high
+  if (nrow(pairs) == 0) {
+    return(tibble(from = character(), to = character()))
+  }
+  
+  # 2. Level 2 Edges: College -> College Collab Pairs (e.g., AG -> AG:AG, EN -> AG:EN)
+  edges_l2 <- pairs %>%
+    separate(college_collab, into = c("c1", "c2"), sep = ":", remove = FALSE) %>%
+    pivot_longer(cols = c(c1, c2), values_to = "from") %>%
+    select(from, to = college_collab) %>%
+    distinct()
+  
+  # 3. Level 1 Edges: Root -> Active Colleges
+  edges_l1 <- tibble(
+    from = root_name,
+    to = unique(edges_l2$from)
+  )
+  
+  # Combine hierarchy levels
+  bind_rows(edges_l1, edges_l2)
+}
+
+create_nodes_df <- function(data, edges_df, root_name = "TAMU") {
+  # 1. Get count for leaf nodes present in the filtered edges
+  leaf_counts <- data %>%
+    filter(!is.na(college_collab) & college_collab != "") %>%
+    count(college_collab, name = "size") %>%
+    filter(college_collab %in% edges_df$to)
+  
+  # 2. Get all unique nodes dynamically present in the edges graph
+  all_nodes <- unique(c(edges_df$from, edges_df$to))
+  
+  # 3. Build nodes data frame with hierarchy groups and sizes
+  nodes_df <- tibble(name = all_nodes) %>%
+    left_join(leaf_counts, by = c("name" = "college_collab")) %>%
+    mutate(
+      # Parent nodes (TAMU & Colleges) have size = 0 so ggraph aggregates child sizes
+      size = ifelse(is.na(size), 0, size),
+      
+      # Assign structural levels/groups for styling/coloring
+      group = case_when(
+        name == root_name ~ "Root",
+        !str_detect(name, ":") ~ "College",
+        TRUE ~ "Collaboration"
+      )
+    )
+  
+  return(nodes_df)
+}
+
+create_edges_df_orig <- function(data, root_name = "TAMU") {
+  # Get all distinct college_collab values
+  pairs <- data %>%
+    filter(!is.na(college_collab) & college_collab != "") %>%
+    distinct(college_collab)
+  
+  # Level 2 Edges: College -> College Collab Pairs (e.g., AG -> AG:AG, EN -> AG:EN)
+  edges_l2 <- pairs %>%
+    separate(college_collab, into = c("c1", "c2"), sep = ":", remove = FALSE) %>%
+    pivot_longer(cols = c(c1, c2), values_to = "from") %>%
+    select(from, to = college_collab) %>%
+    distinct()
+  
+  # Level 1 Edges: Root -> Individual Colleges (e.g., TAMU -> AG, TAMU -> EN)
+  edges_l1 <- tibble(
+    from = root_name,
+    to = unique(edges_l2$from)
+  )
+  
+  # Combine both hierarchy levels
+  bind_rows(edges_l1, edges_l2)
+}
+
+edges.auto <- create_edges_df(data_tamu_collabs, min_size =4)
+
+create_nodes_df_orig <- function(data, edges_df, root_name = "TAMU") {
+  # 1. Count collaboration frequencies for leaf node sizes
+  leaf_counts <- data %>%
+    filter(!is.na(college_collab) & college_collab != "") %>%
+    count(college_collab, name = "size")
+  
+  # 2. Get all unique nodes from the edges data frame
+  all_nodes <- unique(c(edges_df$from, edges_df$to))
+  
+  # 3. Build nodes data frame with hierarchy groups and sizes
+  nodes_df <- tibble(name = all_nodes) %>%
+    left_join(leaf_counts, by = c("name" = "college_collab")) %>%
+    mutate(
+      # Parent nodes (TAMU & Colleges) have size = 0 so ggraph aggregates child sizes
+      size = ifelse(is.na(size), 0, size),
+      
+      # Assign structural levels/groups for styling/coloring
+      group = case_when(
+        name == root_name ~ "Root",
+        !str_detect(name, ":") ~ "College",
+        TRUE ~ "Collaboration"
+      )
+    )
+  
+  return(nodes_df)
+}
+
+nodes.auto <- create_nodes_df(data_tamu_collabs, edges.auto)
+
+# 3. Create Graph
+graph <- tbl_graph(nodes = nodes.auto, edges = edges.auto)
+
+# 4. Plot with leaf filtering
+ggraph(graph, layout = "circlepack", weight = size) +
+  # Layer 1: Background containers (Root & Colleges)
+  geom_node_circle(
+    aes(filter = !leaf), 
+    fill = "cyan", 
+    color = "grey70", 
+    linewidth = 0.5
+  ) +
+  # Layer 2: Foreground leaf circles (Collaboration pairings)
+  geom_node_circle(
+    aes(fill = group, filter = leaf), 
+    color = "white", 
+    linewidth = 0.5
+  ) +
+  # Layer 3: Labels on leaf nodes with collaborations
+  geom_node_text(
+    aes(label = name, filter = leaf), 
+    size = 3, 
+    fontface = "bold"
+  ) +
+  theme_void() +
+  coord_fixed()
+
+```
+
+
+
